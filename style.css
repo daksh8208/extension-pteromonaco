@@ -1,18 +1,38 @@
-.FileEditContainer___StyledDiv3-sc-48rzpu-7, .FileEditContainer___StyledDiv4-sc-48rzpu-8 {
+/*
+ * Hide the original CodeMirror editor and its associated controls.
+ * We target the CodeMirror DOM elements directly — these are stable
+ * across panel rebuilds unlike styled-components generated class names.
+ *
+ * The CodemirrorEditor renders a div > textarea (converted to .CodeMirror)
+ * and the parent EditorContainer has min-height/height set inline.
+ * The bottom bar (language select + save button) that belongs to the
+ * original editor is a flex row rendered immediately after EditorContainer.
+ *
+ * Since BeforeEdit injects our Monaco editor before these elements, we
+ * hide them with the selectors below.
+ */
+
+/* Hide the CodeMirror editor wrapper and the scrollbar overlay */
+.CodeMirror,
+.CodeMirror-scroll,
+.CodeMirror-simplescroll-vertical {
     display: none !important;
 }
 
+/* Hide the EditorContainer styled div that wraps the CodeMirror textarea */
+div:has(> .CodeMirror) {
+    display: none !important;
+}
+
+/* Hide the bottom toolbar row (language select + save/create button)
+   that belongs to the original file editor — it sits as a flex row
+   with justify-end and mt-4 styling right after the editor container. */
+div:has(> .CodeMirror) ~ div {
+    display: none !important;
+}
+
+/* Monaco editor container sizing */
 #monaco-container {
-    height: calc(-20rem + 100vh);
+    height: calc(100vh - 20rem);
     min-height: 16rem;
-}
-
-.Button__ButtonStyle-sc-1qu1gou-0 {
-    flex: 1 1 0%;
-}
-
-@media (min-width: 640px) {
-    .Button__ButtonStyle-sc-1qu1gou-0 {
-        flex: none;
-    }
 }
