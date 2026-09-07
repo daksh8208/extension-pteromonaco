@@ -1,34 +1,57 @@
 /*
  * Hide the original CodeMirror editor and its associated controls.
- * We target the CodeMirror DOM elements directly — these are stable
- * across panel rebuilds unlike styled-components generated class names.
  *
- * The CodemirrorEditor renders a div > textarea (converted to .CodeMirror)
- * and the parent EditorContainer has min-height/height set inline.
- * The bottom bar (language select + save button) that belongs to the
- * original editor is a flex row rendered immediately after EditorContainer.
+ * Pterodactyl's FileEditContainer renders:
  *
- * Since BeforeEdit injects our Monaco editor before these elements, we
- * hide them with the selectors below.
+ *   <div class="relative">              <- wrapper
+ *       <SpinnerOverlay />
+ *       <EditorContainer>               <- styled div
+ *           <div class="CodeMirror" />   <- created by CodeMirror.fromTextArea
+ *       </EditorContainer>
+ *   </div>
+ *   <div class="flex justify-end mt-4">  <- language select + Save Content
+ *
+ * Note the toolbar is a sibling of the *wrapper*, not of the element that
+ * directly holds .CodeMirror. Targeting `div:has(> .CodeMirror) ~ div` never
+ * matches anything, which is why two "Save Content" toolbars showed up.
+ *
+ * Editor.tsx also removes these nodes from the DOM side as a safety net for
+ * browsers/panel versions where these selectors don't line up.
  */
 
-/* Hide the CodeMirror editor wrapper and the scrollbar overlay */
+/* Hide the CodeMirror editor itself */
 .CodeMirror,
 .CodeMirror-scroll,
 .CodeMirror-simplescroll-vertical {
     display: none !important;
 }
 
-/* Hide the EditorContainer styled div that wraps the CodeMirror textarea */
+/* Hide the EditorContainer that directly wraps .CodeMirror.
+   This element can never contain our Monaco editor, so it is safe. */
 div:has(> .CodeMirror) {
     display: none !important;
 }
 
-/* Hide the bottom toolbar row (language select + save/create button)
-   that belongs to the original file editor — it sits as a flex row
-   with justify-end and mt-4 styling right after the editor container. */
-div:has(> .CodeMirror) ~ div {
+/* Hide the original toolbar: the sibling that follows the wrapper whose
+   grandchild is .CodeMirror. Our own toolbar is not matched because our
+   preceding sibling contains #monaco-container, not .CodeMirror. */
+div:has(> div > .CodeMirror) + div {
     display: none !important;
+}
+
+/* Belt and braces: anything Editor.tsx flagged as the original UI. */
+[data-pteromonaco-hidden='true'] {
+    display: none !important;
+}
+
+/* Never hide our own editor or toolbar */
+[data-pteromonaco='root'],
+[data-pteromonaco='toolbar'] {
+    display: revert;
+}
+
+[data-pteromonaco='toolbar'] {
+    display: flex !important;
 }
 
 /* Monaco editor container sizing */

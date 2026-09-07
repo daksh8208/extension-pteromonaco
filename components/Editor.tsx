@@ -155,6 +155,7 @@ const Editor = () => {
 
     const containerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<any>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
 
     const id = ServerContext.useStoreState((state) => state.server.data!.id);
     const uuid = ServerContext.useStoreState((state) => state.server.data!.uuid);
@@ -290,6 +291,97 @@ const Editor = () => {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [action, save]);
 
+    /*
+     * Hide the panel's original CodeMirror editor *and* its toolbar (language
+     * select + "Save Content" button).
+     *
+     * Blueprint injects this component alongside the original editor rather
+     * than replacing it, so without this the page renders two identical
+     * toolbars. CSS alone is fragile here because the toolbar is a sibling of
+     * the wrapper around the editor, not of the editor itself — so we resolve
+     * the nodes from the DOM and skip anything belonging to this component.
+     */
+    useEffect(() => {
+        const hidden: HTMLElement[] = [];
+
+        const hide = (el: HTMLElement | null | undefined) => {
+            if (!el || el.dataset.pteromonacoHidden === 'true') return;
+            // Never hide our own UI.
+            if (rootRef.current && (el.contains(rootRef.current) || rootRef.current.contains(el))) return;
+
+            el.dataset.pteromonacoHidden = 'true';
+            el.dataset.pteromonacoDisplay = el.style.display;
+            el.style.display = 'none';
+            hidden.push(el);
+        };
+
+        let editorHidden = false;
+        let toolbarHidden = false;
+
+        const hideOriginalEditor = () => {
+            document.querySelectorAll<HTMLElement>('.CodeMirror').forEach((cm) => {
+                const editorContainer = cm.parentElement;
+                if (!editorContainer) return;
+
+                // Prefer hiding the wrapper (also removes the original spinner
+                // overlay), but fall back to the editor container if that
+                // wrapper happens to contain our own editor.
+                const wrapper = editorContainer.parentElement;
+                if (wrapper && !(rootRef.current && wrapper.contains(rootRef.current))) {
+                    hide(wrapper);
+                } else {
+                    hide(editorContainer);
+                }
+                editorHidden = true;
+            });
+
+            // The original toolbar is the closest ancestor of the panel's mode
+            // <select> that also holds the save/create button.
+            document.querySelectorAll<HTMLElement>('select').forEach((select) => {
+                if (rootRef.current?.contains(select)) return;
+
+                let node: HTMLElement | null = select.parentElement;
+                while (node && node !== document.body) {
+                    if (node.querySelector('button')) {
+                        hide(node);
+                        toolbarHidden = true;
+                        return;
+                    }
+                    node = node.parentElement;
+                }
+            });
+        };
+
+        hideOriginalEditor();
+
+        // CodeMirror and its toolbar mount asynchronously, so keep watching
+        // until both have been dealt with, then stop observing to avoid doing
+        // this work on every keystroke inside Monaco.
+        let scheduled = 0;
+        const observer = new MutationObserver(() => {
+            if (scheduled) return;
+            scheduled = window.requestAnimationFrame(() => {
+                scheduled = 0;
+                hideOriginalEditor();
+                if (editorHidden && toolbarHidden) observer.disconnect();
+            });
+        });
+
+        if (!editorHidden || !toolbarHidden) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
+
+        return () => {
+            observer.disconnect();
+            if (scheduled) window.cancelAnimationFrame(scheduled);
+            hidden.forEach((el) => {
+                el.style.display = el.dataset.pteromonacoDisplay ?? '';
+                delete el.dataset.pteromonacoHidden;
+                delete el.dataset.pteromonacoDisplay;
+            });
+        };
+    }, []);
+
     // Push new content into editor when it changes externally (e.g. initial load)
     useEffect(() => {
         if (editorRef.current && content !== editorRef.current.getValue()) {
@@ -298,7 +390,7 @@ const Editor = () => {
     }, [content]);
 
     return (
-        <>
+        <div ref={rootRef} data-pteromonaco={'root'}>
             <FileNameModal
                 visible={modalVisible}
                 onDismissed={() => setModalVisible(false)}
@@ -318,7 +410,10 @@ const Editor = () => {
                 />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+            <div
+                data-pteromonaco={'toolbar'}
+                style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}
+            >
                 <div style={{ flex: '1 1 0%', maxWidth: '12rem', marginRight: '1rem' }}>
                     <Select value={lang} onChange={(e) => setLang(e.currentTarget.value)}>
                         {modes.map((mode) => (
@@ -339,7 +434,7 @@ const Editor = () => {
                     </Can>
                 )}
             </div>
-        </>
+        </div>
     );
 };
 
